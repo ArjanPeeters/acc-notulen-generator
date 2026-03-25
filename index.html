@@ -632,6 +632,7 @@ const LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAABEkAAAO9CAYAAAB+QTnMAAAgAElEQVR4nOzdQW
 async function buildDocxBlob(meeting, topics, items, parts, nameMap, assigneesByItem, companyMap) {
   const title  = meeting.title || 'Vergadering';
   const date   = fmtDate(meeting.starts_at);
+  const accUrl = `https://acc.autodesk.eu/build/meetings/projects/${meeting.bim360_project_id}/meeting/${meeting.id}`;
   const time   = fmtTime(meeting.starts_at);
   const endTime = (() => {
     if (!meeting.starts_at || !meeting.duration) return '';
@@ -670,6 +671,21 @@ async function buildDocxBlob(meeting, topics, items, parts, nameMap, assigneesBy
   const g3 = '<w:tblGrid><w:gridCol w:w="5320"/><w:gridCol w:w="2533"/><w:gridCol w:w="1520"/><w:gridCol w:w="1399"/></w:tblGrid>';
 
   // Info table
+  // Cell: nummer + hyperlink naar ACC notulen
+  function numLinkCell(num) {
+    const mar = '<w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
+    const sz  = '<w:sz w:val="20"/><w:szCs w:val="20"/>';
+    const rpr = `<w:color w:val="000000"/>${sz}`;
+    const lrpr= `<w:rStyle w:val="Hyperlink"/>${sz}`;
+    return `<w:tc><w:tcPr>${mar}</w:tcPr>` +
+      `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>` +
+      `<w:r><w:rPr>${rpr}</w:rPr><w:t xml:space="preserve">${esc(String(num))} - </w:t></w:r>` +
+      `<w:hyperlink r:id="rId4">` +
+      `<w:r><w:rPr>${lrpr}</w:rPr><w:t>Bekijk notulen op ACC</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p></w:tc>`;
+  }
+
   // Header rows: green bar with "Vergadering" label + big title
   const mar = '<w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
   const titleHdrRows =
@@ -681,7 +697,7 @@ async function buildDocxBlob(meeting, topics, items, parts, nameMap, assigneesBy
     `<w:t>${esc(title)}</w:t></w:r></w:p></w:tc></w:tr>`;
 
   const infoRows = [
-    `<w:tr>${tcell('Nummer',{bold:true,bg:C.GRAY})}${tcell(String(num))}</w:tr>`,
+    `<w:tr>${tcell('Nummer',{bold:true,bg:C.GRAY})}${numLinkCell(num)}</w:tr>`,
     `<w:tr>${tcell('Datum',{bold:true,bg:C.GRAY})}${tcell(date+(time?` ${time}`:'')+(endTime?` - ${endTime}`:''))}</w:tr>`,
     `<w:tr>${tcell('Locatie',{bold:true,bg:C.GRAY})}${tcell(loc)}</w:tr>`,
     `<w:tr>${tcell('Status',{bold:true,bg:C.GRAY})}${tcell({'open':'Open','draft':'Concept','closed':'Gesloten','active':'Actief','minutes':'Notulen','agenda':'Agenda'}[meeting.status]||meeting.status||'-')}</w:tr>`,
@@ -749,17 +765,24 @@ ${agTbl}${sp}
 </w:sectPr>
 </w:body></w:document>`;
 
-  return await createDocxBlob(docXml);
+  return await createDocxBlob(docXml, accUrl);
 }
 
 // ─── Minimal DOCX ZIP builder ─────────────────────────────────────────────
-async function createDocxBlob(docXml) {
+async function createDocxBlob(docXml, accUrl) {
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:docDefaults><w:rPrDefault><w:rPr>
     <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
     <w:sz w:val="20"/><w:szCs w:val="20"/>
   </w:rPr></w:rPrDefault></w:docDefaults>
+  <w:style w:type="character" w:styleId="Hyperlink">
+    <w:name w:val="Hyperlink"/>
+    <w:rPr>
+      <w:color w:val="0563C1"/>
+      <w:u w:val="single"/>
+    </w:rPr>
+  </w:style>
 </w:styles>`;
 
   // Decode logo PNG for embedding
@@ -800,6 +823,9 @@ async function createDocxBlob(docXml) {
   <Relationship Id="rId3"
     Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer"
     Target="footer1.xml"/>
+  <Relationship Id="rId4"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+    Target="${accUrl}" TargetMode="External"/>
 </Relationships>`,
     'word/header1.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -809,9 +835,9 @@ async function createDocxBlob(docXml) {
        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:p>
     <w:pPr>
-      <w:jc w:val="right"/>
-      <w:ind w:right="-567"/>
+      <w:tabs><w:tab w:val="right" w:pos="10772"/></w:tabs>
     </w:pPr>
+    <w:r><w:rPr/><w:tab/></w:r>
     <w:r><w:drawing>
       <wp:inline>
         <wp:extent cx="825236" cy="720000"/>
